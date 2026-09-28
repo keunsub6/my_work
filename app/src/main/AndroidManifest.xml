@@ -61,6 +61,28 @@
     <!-- POST_NOTIFICATIONS needed on Android 13+ to show FCM notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- ───────────── [추가] 안부 통화 자체 WebView ───────────── -->
+    <!--
+      RECORD_AUDIO:
+        지금까지 안부 통화는 MealTime 의 WebView 가 대신 띄워 주었고, 마이크도
+        MealTime 이 자기 권한으로 잡았습니다. CareCall 이 통화 화면을 직접 띄우려면
+        이 앱에도 마이크 권한이 필요합니다.
+
+        이 권한이 없으면 자체 WebView 를 아예 쓰지 않고 기존 MealTime 경로로
+        그대로 갑니다(WebCallLauncher.tryLaunch 가 false 를 돌려줍니다).
+        따라서 허용하지 않은 어르신의 동작은 지금과 완전히 동일합니다.
+        앱이 스스로 권한 팝업을 띄우지도 않습니다.
+
+      microphone 하드웨어 required=false:
+        ⚠ 필수입니다. RECORD_AUDIO 를 선언하면 Play 가 android.hardware.microphone 을
+        required=true 로 암묵 추가해, 마이크 없는 기기가 설치 대상에서 빠집니다.
+        명시적으로 false 를 주어 기존 설치 가능 기기 범위를 유지합니다.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+
     <!-- ───────────── [추가] 건강지표(걸음수·활동) 수집 ───────────── -->
     <!-- Android 10(Q)+ 런타임 권한. "등록하기" 완료 직후에만 요청하며, 거부해도 앱은 정상 동작합니다. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
@@ -126,6 +148,33 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.ScanCamera" />
+
+        <!-- ───────────── [추가] 안부 통화 자체 WebView 화면 ───────────── -->
+        <!--
+          exported=false 입니다. 이 앱의 FCM 처리에서만 열리며 다른 앱은 실행할 수 없습니다.
+
+          showWhenLocked / turnScreenOn:
+            MealTime 의 WebRtcRequestActivity, 그리고 이 앱의 ScanActivity 와 같은 이유입니다.
+            어르신은 잠금 해제를 못 하시는 경우가 많아, 이게 없으면 통화 화면이
+            "잠금을 푸세요" 뒤에 가려 사실상 못 씁니다.
+
+          excludeFromRecents:
+            통화가 끝난 뒤 최근앱에 남아 어르신이 나중에 잘못 눌러 다시 여는 것을 막습니다.
+
+          configChanges:
+            통화 중 화면 회전·폰트 변경 등으로 액티비티가 재생성되면 WebView 가 파괴되어
+            통화가 끊깁니다. 재생성 없이 넘기도록 지정합니다.
+        -->
+        <activity
+            android:name=".webcall.WebCallActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale"
+            android:theme="@style/Theme.WebCall" />
 
         <service
             android:name=".fcm.AppFirebaseMessagingService"

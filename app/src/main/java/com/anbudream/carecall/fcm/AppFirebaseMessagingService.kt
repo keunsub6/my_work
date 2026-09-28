@@ -16,6 +16,7 @@ import com.anbudream.carecall.scan.ScanNotifier
 import com.anbudream.carecall.screening.CallScreenState
 import com.anbudream.carecall.time.AppLog
 import com.anbudream.carecall.time.AppTime
+import com.anbudream.carecall.webcall.WebCallLauncher
 import com.anbudream.carecall.work.TokenRefreshWorker
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -114,17 +115,38 @@ class AppFirebaseMessagingService : FirebaseMessagingService() {
             //      메시지를 normal로 강등하지 않습니다.
             postPendingNotification(url)
 
-            // 2. 표시를 요청합니다. 블로킹하지 않고, 성공을 판정하지도 않습니다.
-            val nonce = MealTimeLauncher.requestImmediateOpen(applicationContext, url)
-            AppLog.i(
-                TAG,
-                "care call push requested=${nonce != null} priority=${message.priority} " +
-                    "originalPriority=${message.originalPriority} keys=${message.data.keys}"
-            )
+            // 2. 자체 WebView 로 띄울 수 있으면 그쪽을 먼저 씁니다.
+            //    조건(신뢰 URL·오버레이·마이크 권한)을 하나라도 못 갖추면 false 를
+            //    돌려주고, 아래 기존 MealTime 경로가 그대로 실행됩니다.
+            //    실행 후에 실패하는 경우(화면 미표시, 로드 오류, renderer 사망)는
+            //    WebCall 쪽이 스스로 MealTime 으로 되돌립니다.
+            //    runCatching 으로 감싸 새 코드의 예외가 FCM 서비스를 죽이지 않게 합니다.
+            val handledInApp = runCatching {
+                WebCallLauncher.tryLaunch(applicationContext, url)
+            }.getOrElse {
+                AppLog.e(TAG, "in-app webcall launch threw, using MealTime", it)
+                false
+            }
 
-            if (nonce == null) {
-                // MealTime 미설치/구버전이면 기존 알림 탭 fallback도 함께 준비합니다.
-                MealTimeLauncher.rememberPendingUrl(applicationContext, url)
+            if (!handledInApp) {
+                // 3. 표시를 요청합니다. 블로킹하지 않고, 성공을 판정하지도 않습니다.
+                val nonce = MealTimeLauncher.requestImmediateOpen(applicationContext, url)
+                AppLog.i(
+                    TAG,
+                    "care call push requested=${nonce != null} priority=${message.priority} " +
+                        "originalPriority=${message.originalPriority} keys=${message.data.keys}"
+                )
+
+                if (nonce == null) {
+                    // MealTime 미설치/구버전이면 기존 알림 탭 fallback도 함께 준비합니다.
+                    MealTimeLauncher.rememberPendingUrl(applicationContext, url)
+                }
+            } else {
+                AppLog.i(
+                    TAG,
+                    "care call push handled by the in-app webview priority=${message.priority} " +
+                        "originalPriority=${message.originalPriority} keys=${message.data.keys}"
+                )
             }
             return
         }
