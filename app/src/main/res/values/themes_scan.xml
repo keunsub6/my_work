@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      스캔 화면 전용 테마입니다. 기존 Theme.FcmRegister 를 건드리지 않으려고
+      이름과 파일을 분리했습니다. 카메라 프리뷰 배경이라 검정 고정입니다.
+    -->
+    <style name="Theme.ScanCamera" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+</resources>
