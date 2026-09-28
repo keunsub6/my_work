@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ───────────── [추가] 글씨 읽어드리기(카메라 판독) ───────────── -->
+    <!--
+      위험 권한이지만 카메라 기능이 화면에 있으므로 Play 별도 선언서는 불필요합니다.
+      사진은 저장·전송하지 않고 기기 안에서 판독만 하므로 저장소/미디어 권한은 없습니다.
+      FOREGROUND_SERVICE / USE_FULL_SCREEN_INTENT 도 추가하지 않습니다(알림 탭 방식).
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
+    <!--
+      [2단계] 알림 탭 없이 촬영 화면을 바로 띄우기 위한 권한 2개.
+
+      SYSTEM_ALERT_WINDOW:
+        백그라운드 액티비티 실행 제한을 면제받아, 안부 통화 중 요청이 오면
+        어르신이 아무것도 누르지 않아도 카메라 화면이 표시됩니다.
+        대상 이용자(70~90대)는 잠금 해제·알림 확인·앱 탐색을 수행하지 못해
+        이 권한 없이는 기능이 사실상 동작하지 않습니다.
+        띄우는 것은 이 앱의 전체 화면 카메라 화면 하나뿐이며, 부유 창이나
+        다른 앱 위 배너는 표시하지 않습니다.
+        허용되지 않아도 앱은 정상 동작합니다(알림 탭 경로로 자동 전환).
+
+      REQUEST_IGNORE_BATTERY_OPTIMIZATIONS:
+        어르신 휴대폰은 장시간 방치되어 절전 상태에 들어가며, 이 경우
+        안부 요청 도달이 지연·누락됩니다.
+
+      USE_FULL_SCREEN_INTENT 는 의도적으로 넣지 않았습니다.
+      자동 표시의 실제 동력은 위 오버레이 권한이고, FSI 는 심사 부담이
+      가장 큰 권한이라 없이도 목표가 달성됩니다.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- MealTime의 공개 WebView 화면 호출 권한(normal 등급, 서명키 무관). -->
+    <uses-permission android:name="com.anbudream.mealtime.permission.SHOW_WEBRTC_SCREEN" />
+
+    <!-- Android 11+에서 설치된 MealTime 확인 및 명시적 컴포넌트 호출에 필요. -->
+    <queries>
+        <package android:name="com.anbudream.mealtime" />
+    </queries>
+
+    <!--
+      Fallback phone-number read.
+      READ_PHONE_NUMBERS is the correct permission for SubscriptionManager.getPhoneNumber()
+      on API 33+. We intentionally do NOT declare READ_PHONE_STATE: it is a broader,
+      higher-risk permission and is not required for reading the line number.
+
+      ⚠ Google Play policy: phone-number permissions are sensitive. If your app is not a
+      default Dialer/Phone handler, you must justify this in Play Console, and many apps
+      are better off skipping it entirely and relying on the Hint API + manual entry.
+    -->
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+
+    <!-- POST_NOTIFICATIONS needed on Android 13+ to show FCM notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ───────────── [추가] 건강지표(걸음수·활동) 수집 ───────────── -->
+    <!-- Android 10(Q)+ 런타임 권한. "등록하기" 완료 직후에만 요청하며, 거부해도 앱은 정상 동작합니다. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Q 미만에서는 Play Services가 정의한 동일 권한을 씁니다(설치 시 자동 부여). -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION"
+        android:maxSdkVersion="28" />
+    <!--
+      ⚠ 필수: JobInfo.setPersisted(true) 는 이 권한이 없으면 IllegalArgumentException 을 던집니다.
+      호출부가 runCatching 으로 감싸여 있어 예외가 조용히 삼켜지고, 수집 작업이 영영
+      예약되지 않는 형태로 실패합니다.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 걸음수 센서가 없는 기기도 설치 가능해야 합니다(없으면 활동 지표만 수집). -->
+    <uses-feature
+        android:name="android.hardware.sensor.stepcounter"
+        android:required="false" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.FcmRegister"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.FcmRegister">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ───────────── [추가] 글씨 읽어드리기 화면 ───────────── -->
+        <!--
+          exported=false 입니다. 이 앱의 알림에서만 열리며 다른 앱은 실행할 수 없습니다.
+          알림 탭이 이 액티비티를 직접 가리킵니다(Android 12+ 트램폴린 금지 대응).
+          Compose 를 쓰지 않는 순수 View 화면이라 기존 테마와 독립입니다.
+
+          showWhenLocked / turnScreenOn (MealTime 의 WebRtcRequestActivity 와 동일):
+            어르신은 잠금 해제를 못 하시는 경우가 많습니다. 이 두 속성이 없으면
+            잠금화면에서 알림을 눌렀을 때 시스템이 "잠금을 푸세요" 화면을 먼저
+            띄워 사실상 사용이 불가능합니다. 두 속성을 주면 잠금 위에 바로 열리고,
+            화면이 꺼져 있으면 켜집니다. 새 권한이 필요 없습니다.
+
+          excludeFromRecents:
+            최근앱 목록에 카메라 화면이 남아 어르신이 나중에 잘못 눌러 여는 것을
+            막습니다. 촬영은 항상 요청을 받은 그 순간에만 이루어져야 합니다.
+        -->
+        <activity
+            android:name=".scan.ScanActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.ScanCamera" />
+
+        <service
+            android:name=".fcm.AppFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- MealTime에 넘긴 one-shot PendingIntent callback만 실행할 수 있습니다. -->
+        <receiver
+            android:name=".WebCallShownReceiver"
+            android:exported="false" />
+
+        <!-- ───────────── [추가] 건강지표 수집 컴포넌트 ───────────── -->
+        <!-- 30분 주기로 걸음수 누적값 스냅샷만 읽고 즉시 센서를 해제합니다. -->
+        <service
+            android:name=".health.HealthSamplingJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false" />
+
+        <!-- Play Services 활동인식 결과 수신용. 명시적 PendingIntent로만 호출됩니다. -->
+        <receiver
+            android:name=".health.HealthActivityReceiver"
+            android:exported="false" />
+
+        <!-- 기기 시각/시간대/재부팅 변화가 건강 집계와 통화 리스를 오염시키지 않게 정리합니다. -->
+        <receiver
+            android:name=".time.TimeChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ───────────── [추가] 안부 통화 중 전화 차단 ───────────── -->
+        <!--
+          ROLE_CALL_SCREENING 은 권한이 아니라 "역할"이라 uses-permission 선언이 없습니다.
+          사용자가 앱 안에서 직접 켤 때만 역할을 요청하며, 발신번호는 읽지 않습니다.
+          (READ_CALL_LOG / READ_CONTACTS 를 요구하지 않는 이유입니다.)
+          exported=true 이지만 BIND_SCREENING_SERVICE 는 시스템만 보유하므로
+          다른 앱은 이 서비스에 접근할 수 없습니다.
+        -->
+        <service
+            android:name=".screening.CareCallScreeningService"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <!-- 차단 알림의 "지금 전화 받기" 버튼 수신점. -->
+        <receiver
+            android:name=".screening.ScreeningControlReceiver"
+            android:exported="false" />
+
+        <!-- Default FCM notification channel for messages received in the background -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="@string/default_notification_channel_id" />
+
+    </application>
+
+</manifest>
